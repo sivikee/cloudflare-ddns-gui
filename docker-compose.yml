@@ -1,6 +1,8 @@
 services:
   ddns-gui:
-    build: .
+    image: sivikee/cloudflare-ddns-gui:latest
+    # To build from source instead of pulling from Docker Hub, replace the
+    # line above with:  build: .
     restart: always
     ports:
       - "8080:8080"

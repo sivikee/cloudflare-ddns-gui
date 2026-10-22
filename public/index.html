@@ -14,7 +14,7 @@
     color: #1c1f23;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
-  .wrap { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  .wrap { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
   h1 { font-size: 18px; margin: 0 0 4px; }
   .sub { color: #6b7280; font-size: 13px; margin: 0; }
   .card {
@@ -37,36 +37,36 @@
   .pill.bad { background: #fdeaea; color: #c22b2b; }
   .pill.neutral { background: #eef0f2; color: #555; }
   .pill.busy { background: #fff4e0; color: #93590c; }
-  label { display: block; font-size: 13px; font-weight: 600; margin: 16px 0 6px; }
-  label:first-of-type { margin-top: 0; }
-  input[type="password"], textarea {
-    width: 100%;
+  input[type="text"], input[type="password"], select {
     font-family: inherit;
     font-size: 14px;
-    padding: 8px 10px;
+    padding: 7px 10px;
     border: 1px solid #d4d7dc;
     border-radius: 6px;
     background: #fff;
     color: #1c1f23;
+    min-width: 0;
   }
-  textarea { resize: vertical; min-height: 72px; font-family: ui-monospace, Consolas, monospace; }
-  .hint { font-size: 12px; color: #8a8f98; margin-top: 4px; }
-  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
-  .checkbox-row label { margin: 0; }
+  .hint { font-size: 12px; color: #8a8f98; margin: 0 0 12px; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 13px; font-weight: 600; }
   .actions { display: flex; gap: 10px; align-items: center; margin-top: 20px; }
   button {
     font-family: inherit;
     font-size: 14px;
     font-weight: 600;
-    padding: 8px 16px;
+    padding: 7px 14px;
     border-radius: 6px;
     border: 1px solid transparent;
     cursor: pointer;
+    white-space: nowrap;
   }
   button.primary { background: #f6821f; color: #fff; }
   button.primary:disabled { background: #f8c391; cursor: default; }
   button.secondary { background: #fff; border-color: #d4d7dc; color: #333; }
   button.secondary:disabled { color: #aaa; cursor: default; }
+  button.link { background: none; border: none; color: #555; padding: 4px 6px; font-weight: 500; font-size: 13px; }
+  button.link:hover { color: #111; text-decoration: underline; }
+  button.link.danger:hover { color: #c22b2b; }
   .error-box {
     background: #fdeaea;
     color: #a12626;
@@ -93,7 +93,28 @@
     margin: 0;
     white-space: pre;
   }
-  .card h2 { font-size: 14px; margin: 0 0 12px; }
+  .card h2 { font-size: 14px; margin: 0 0 4px; }
+
+  .list { display: flex; flex-direction: column; gap: 8px; }
+  .empty { font-size: 13px; color: #8a8f98; }
+  .token-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid #eee; }
+  .token-row:last-child { border-bottom: none; }
+  .token-alias { font-weight: 600; font-size: 14px; }
+  .token-mask { font-family: ui-monospace, Consolas, monospace; font-size: 13px; color: #6b7280; }
+  .token-row .spacer { flex: 1; }
+  .token-edit { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; }
+  .token-edit input { flex: 1 1 160px; }
+
+  .domain-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .domain-row .domain-name { flex: 2 1 220px; font-family: ui-monospace, Consolas, monospace; }
+  .domain-row select { flex: 1 1 160px; }
+  .new-token {
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+    background: #fafbfc; border: 1px dashed #d4d7dc; border-radius: 6px;
+    padding: 10px; margin: -2px 0 4px;
+  }
+  .new-token input { flex: 1 1 160px; }
+  .new-token .error-box { flex-basis: 100%; margin-top: 0; }
 </style>
 </head>
 <body>
@@ -105,7 +126,7 @@
 
   <div class="card">
     <h2>Status</h2>
-    <div class="status-row">
+    <div class="status-row" style="margin-top:12px;">
       <span class="status-item">Public IP: <strong id="publicIp">—</strong></span>
       <span class="status-item">Last run: <strong id="lastRun">—</strong></span>
       <span class="status-item">Next run: <strong id="nextRun">—</strong></span>
@@ -121,25 +142,31 @@
   </div>
 
   <div class="card">
-    <h2>Settings</h2>
+    <h2>Domains</h2>
+    <p class="hint">Each domain uses one API token. Pick a saved one, or choose “New token…” to add one.</p>
     <form id="configForm">
-      <label for="apiToken">Cloudflare API token</label>
-      <input type="password" id="apiToken" name="apiToken" autocomplete="off" placeholder="unchanged" />
-      <div class="hint" id="tokenHint"></div>
-
-      <label for="domains">Domains (one per line)</label>
-      <textarea id="domains" name="domains" placeholder="example.org&#10;www.example.org"></textarea>
-
-      <div class="checkbox-row">
-        <input type="checkbox" id="proxied" name="proxied" />
-        <label for="proxied" style="margin:0;">Proxied through Cloudflare</label>
+      <div class="list" id="domainList"></div>
+      <div class="actions" style="margin-top:12px;">
+        <button type="button" id="addDomainBtn" class="secondary">+ Add domain</button>
       </div>
+
+      <label class="checkbox-row">
+        <input type="checkbox" id="proxied" name="proxied" />
+        Proxied through Cloudflare
+      </label>
 
       <div class="actions">
         <button type="submit" id="saveBtn" class="primary">Save</button>
       </div>
       <div class="error-box" id="errorBox"></div>
     </form>
+  </div>
+
+  <div class="card">
+    <h2>API tokens</h2>
+    <p class="hint">Saved tokens are never shown again — only the last 4 characters.</p>
+    <div class="list" id="tokenList"></div>
+    <div class="error-box" id="tokenErrorBox"></div>
   </div>
 
   <div class="card">
@@ -154,10 +181,24 @@
   const errorBox = $("errorBox");
   const saveBtn = $("saveBtn");
   const updateNowBtn = $("updateNowBtn");
+  const domainList = $("domainList");
+  const tokenList = $("tokenList");
 
-  function showError(message) {
-    errorBox.textContent = message;
-    errorBox.style.display = message ? "block" : "none";
+  const NEW_TOKEN = "__new__";
+  let tokens = []; // [{ id, alias, masked }] — never the secret itself
+
+  function el(tag, props = {}, children = []) {
+    const node = document.createElement(tag);
+    Object.assign(node, props);
+    for (const child of [].concat(children)) {
+      node.append(child);
+    }
+    return node;
+  }
+
+  function showError(box, message) {
+    box.textContent = message;
+    box.style.display = message ? "block" : "none";
   }
 
   function fmtTime(iso) {
@@ -165,38 +206,214 @@
     return new Date(iso).toLocaleString();
   }
 
-  async function loadConfig() {
-    const res = await fetch("/api/config");
-    const data = await res.json();
-    $("domains").value = (data.domains || []).join("\n");
-    $("proxied").checked = Boolean(data.proxied);
-    $("tokenHint").textContent = data.tokenSet
-      ? `Currently set, ends in "${data.tokenHint}". Leave blank to keep it.`
-      : "No token saved yet.";
+  async function api(url, options = {}) {
+    const res = await fetch(url, {
+      ...options,
+      headers: options.body ? { "Content-Type": "application/json" } : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `request failed (HTTP ${res.status})`);
+    return data;
   }
+
+  // --- Tokens -------------------------------------------------------------
+
+  function renderTokens() {
+    tokenList.replaceChildren();
+    if (tokens.length === 0) {
+      tokenList.append(el("div", { className: "empty", textContent: "No tokens saved yet." }));
+    }
+    for (const t of tokens) tokenList.append(tokenRow(t));
+    for (const select of domainList.querySelectorAll("select")) fillTokenSelect(select);
+  }
+
+  function tokenRow(t) {
+    const row = el("div", { className: "token-row" });
+
+    function showView() {
+      const editBtn = el("button", { type: "button", className: "link", textContent: "Edit" });
+      const delBtn = el("button", { type: "button", className: "link danger", textContent: "Delete" });
+      editBtn.onclick = showEdit;
+      delBtn.onclick = async () => {
+        if (!confirm(`Delete token "${t.alias}"?`)) return;
+        showError($("tokenErrorBox"), "");
+        try {
+          await api(`/api/tokens/${t.id}`, { method: "DELETE" });
+          tokens = tokens.filter((x) => x.id !== t.id);
+          renderTokens();
+        } catch (err) {
+          showError($("tokenErrorBox"), err.message);
+        }
+      };
+      row.replaceChildren(
+        el("span", { className: "token-alias", textContent: t.alias }),
+        el("span", { className: "token-mask", textContent: t.masked }),
+        el("span", { className: "spacer" }),
+        editBtn,
+        delBtn
+      );
+    }
+
+    function showEdit() {
+      const aliasInput = el("input", { type: "text", value: t.alias, placeholder: "Alias" });
+      const tokenInput = el("input", {
+        type: "password", autocomplete: "off", placeholder: "New token (leave blank to keep)",
+      });
+      const saveTokBtn = el("button", { type: "button", className: "secondary", textContent: "Save" });
+      const cancelBtn = el("button", { type: "button", className: "link", textContent: "Cancel" });
+      cancelBtn.onclick = showView;
+      saveTokBtn.onclick = async () => {
+        showError($("tokenErrorBox"), "");
+        saveTokBtn.disabled = true;
+        try {
+          const updated = await api(`/api/tokens/${t.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ alias: aliasInput.value, token: tokenInput.value }),
+          });
+          tokens = tokens.map((x) => (x.id === t.id ? updated : x));
+          renderTokens();
+        } catch (err) {
+          showError($("tokenErrorBox"), err.message);
+          saveTokBtn.disabled = false;
+        }
+      };
+      row.replaceChildren(
+        el("div", { className: "token-edit" }, [aliasInput, tokenInput, saveTokBtn, cancelBtn])
+      );
+      aliasInput.focus();
+    }
+
+    showView();
+    return row;
+  }
+
+  // --- Domains ------------------------------------------------------------
+
+  function fillTokenSelect(select) {
+    const value = select.value === NEW_TOKEN ? NEW_TOKEN : select.value || select.dataset.tokenId || "";
+    select.replaceChildren(
+      el("option", { value: "", textContent: "— select token —", disabled: true }),
+      ...tokens.map((t) => el("option", { value: t.id, textContent: `${t.alias} (${t.masked})` })),
+      el("option", { value: NEW_TOKEN, textContent: "+ New token…" })
+    );
+    if (value === NEW_TOKEN) {
+      select.value = NEW_TOKEN;
+    } else if (tokens.some((t) => t.id === value)) {
+      select.value = value;
+      select.dataset.tokenId = value;
+    } else {
+      select.value = "";
+      select.dataset.tokenId = "";
+    }
+  }
+
+  function addDomainRow(domain = { name: "", tokenId: null }) {
+    const wrapper = el("div");
+    const nameInput = el("input", {
+      type: "text", className: "domain-name", value: domain.name, placeholder: "home.example.org",
+    });
+    const select = el("select");
+    select.dataset.tokenId = domain.tokenId || (tokens.length === 1 ? tokens[0].id : "");
+    fillTokenSelect(select);
+    const removeBtn = el("button", { type: "button", className: "link danger", textContent: "Remove" });
+    removeBtn.onclick = () => wrapper.remove();
+
+    let newTokenPanel = null;
+    select.onchange = () => {
+      if (select.value !== NEW_TOKEN) {
+        select.dataset.tokenId = select.value;
+        newTokenPanel?.remove();
+        newTokenPanel = null;
+        return;
+      }
+      if (newTokenPanel) return;
+      newTokenPanel = newTokenForm(
+        (created) => {
+          tokens.push(created);
+          select.dataset.tokenId = created.id;
+          select.value = "";
+          renderTokens();
+          newTokenPanel.remove();
+          newTokenPanel = null;
+        },
+        () => {
+          select.value = "";
+          fillTokenSelect(select);
+          newTokenPanel.remove();
+          newTokenPanel = null;
+        }
+      );
+      wrapper.append(newTokenPanel);
+      newTokenPanel.querySelector("input").focus();
+    };
+
+    wrapper.append(el("div", { className: "domain-row" }, [nameInput, select, removeBtn]));
+    domainList.append(wrapper);
+    return wrapper;
+  }
+
+  function newTokenForm(onCreated, onCancel) {
+    const aliasInput = el("input", { type: "text", placeholder: "Alias, e.g. personal" });
+    const tokenInput = el("input", { type: "password", autocomplete: "off", placeholder: "Cloudflare API token" });
+    const addBtn = el("button", { type: "button", className: "secondary", textContent: "Save token" });
+    const cancelBtn = el("button", { type: "button", className: "link", textContent: "Cancel" });
+    const err = el("div", { className: "error-box" });
+
+    cancelBtn.onclick = onCancel;
+    addBtn.onclick = async () => {
+      showError(err, "");
+      addBtn.disabled = true;
+      addBtn.textContent = "Verifying…";
+      try {
+        const created = await api("/api/tokens", {
+          method: "POST",
+          body: JSON.stringify({ alias: aliasInput.value, token: tokenInput.value }),
+        });
+        tokenInput.value = "";
+        onCreated(created);
+      } catch (e) {
+        showError(err, e.message);
+        addBtn.disabled = false;
+        addBtn.textContent = "Save token";
+      }
+    };
+
+    return el("div", { className: "new-token" }, [aliasInput, tokenInput, addBtn, cancelBtn, err]);
+  }
+
+  async function loadConfig() {
+    const data = await api("/api/config");
+    tokens = data.tokens || [];
+    renderTokens();
+    domainList.replaceChildren();
+    for (const d of data.domains || []) addDomainRow(d);
+    if (domainList.children.length === 0) addDomainRow();
+    $("proxied").checked = Boolean(data.proxied);
+  }
+
+  // --- Status -------------------------------------------------------------
 
   function renderRecords(records) {
     const table = $("recordsTable");
     const tbody = table.querySelector("tbody");
-    tbody.innerHTML = "";
+    tbody.replaceChildren();
     if (!records || records.length === 0) {
       table.style.display = "none";
       return;
     }
     table.style.display = "";
     for (const r of records) {
-      const tr = document.createElement("tr");
       const pillClass = r.status === "error" ? "bad" : r.status === "up to date" ? "neutral" : "ok";
-      tr.innerHTML = `<td>${r.domain}</td>` +
-        `<td><span class="pill ${pillClass}">${r.status}</span></td>` +
-        `<td>${r.message || ""}</td>`;
-      tbody.appendChild(tr);
+      tbody.append(el("tr", {}, [
+        el("td", { textContent: r.domain }),
+        el("td", {}, el("span", { className: `pill ${pillClass}`, textContent: r.status })),
+        el("td", { textContent: r.message || "" }),
+      ]));
     }
   }
 
   async function refreshStatus() {
-    const res = await fetch("/api/status");
-    const data = await res.json();
+    const data = await api("/api/status");
     $("publicIp").textContent = data.publicIp || "unknown";
     $("lastRun").textContent = fmtTime(data.lastRun);
     $("nextRun").textContent = fmtTime(data.nextRun);
@@ -225,36 +442,32 @@
     logBox.scrollTop = logBox.scrollHeight;
   }
 
+  // --- Actions ------------------------------------------------------------
+
+  $("addDomainBtn").addEventListener("click", () => {
+    addDomainRow().querySelector("input").focus();
+  });
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    showError("");
+    showError(errorBox, "");
     saveBtn.disabled = true;
     saveBtn.textContent = "Saving…";
     try {
-      const domains = $("domains").value
-        .split("\n")
-        .map((d) => d.trim())
-        .filter(Boolean);
-      const body = {
-        domains,
-        proxied: $("proxied").checked,
-        apiToken: $("apiToken").value.trim(),
-      };
-      const res = await fetch("/api/config", {
+      const domains = [...domainList.children]
+        .map((row) => ({
+          name: row.querySelector(".domain-name").value.trim(),
+          tokenId: row.querySelector("select").dataset.tokenId || null,
+        }))
+        .filter((d) => d.name);
+      await api("/api/config", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ domains, proxied: $("proxied").checked }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        showError(data.error || "Save failed.");
-        return;
-      }
-      $("apiToken").value = "";
       await loadConfig();
       await refreshStatus();
     } catch (err) {
-      showError(err.message || String(err));
+      showError(errorBox, err.message || String(err));
     } finally {
       saveBtn.disabled = false;
       saveBtn.textContent = "Save";
@@ -265,7 +478,7 @@
     updateNowBtn.disabled = true;
     updateNowBtn.textContent = "Updating…";
     try {
-      await fetch("/api/update", { method: "POST" });
+      await api("/api/update", { method: "POST" });
       await refreshStatus();
     } finally {
       updateNowBtn.disabled = false;

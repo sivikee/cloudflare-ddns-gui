@@ -67,9 +67,9 @@ export async function runOnce() {
     return state;
   }
 
-  const { apiToken, domains, proxied } = config.get();
-  if (!apiToken || domains.length === 0) {
-    log.info("not configured yet (missing API token or domain list) — skipping run");
+  const { domains, proxied } = config.get();
+  if (domains.length === 0) {
+    log.info("not configured yet (no domains) — skipping run");
     return state;
   }
 
@@ -84,23 +84,33 @@ export async function runOnce() {
     }
     state.lastIp = ip;
 
-    let zones;
-    try {
-      zones = await cf.listZones(apiToken);
-    } catch (err) {
-      log.error(`could not list Cloudflare zones: ${err.message}`);
-      state.records = domains.map((domain) => ({
-        domain,
-        status: "error",
-        message: err.message,
-      }));
-      return state;
+    // Zone lists are fetched once per token (and cached by cloudflare.js),
+    // so a failing token only takes down the domains that use it.
+    const zonesByTokenId = new Map(); // tokenId -> zones | Error
+
+    async function zonesFor(token) {
+      if (!zonesByTokenId.has(token.id)) {
+        try {
+          zonesByTokenId.set(token.id, await cf.listZones(token.token));
+        } catch (err) {
+          log.error(`could not list zones for token "${token.alias}": ${err.message}`);
+          zonesByTokenId.set(token.id, err);
+        }
+      }
+      const zones = zonesByTokenId.get(token.id);
+      if (zones instanceof Error) {
+        throw new Error(`token "${token.alias}": ${zones.message}`);
+      }
+      return zones;
     }
 
     const results = [];
-    for (const domain of domains) {
+    for (const { name: domain, tokenId } of domains) {
       try {
-        const result = await syncDomain(domain, { ip, proxied, zones, token: apiToken });
+        const token = config.tokenById(tokenId);
+        if (!token) throw new Error("no API token assigned to this domain");
+        const zones = await zonesFor(token);
+        const result = await syncDomain(domain, { ip, proxied, zones, token: token.token });
         results.push(result);
         if (result.status !== "up to date") log.info(`${domain}: ${result.message}`);
       } catch (err) {
