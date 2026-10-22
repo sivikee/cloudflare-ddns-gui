@@ -1,0 +1,14 @@
+{
+  "name": "cloudflare-ddns-gui",
+  "version": "1.0.0",
+  "description": "Small self-hosted GUI + updater for Cloudflare DDNS (A records only)",
+  "type": "module",
+  "private": true,
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}

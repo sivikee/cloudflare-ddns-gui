@@ -1,0 +1,12 @@
+services:
+  ddns-gui:
+    build: .
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - AUTH_USER=${AUTH_USER}
+      - AUTH_PASSWORD=${AUTH_PASSWORD}
+      - UPDATE_INTERVAL_MINUTES=${UPDATE_INTERVAL_MINUTES:-5}
+    volumes:
+      - ./data:/data

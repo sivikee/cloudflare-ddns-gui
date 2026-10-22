@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cloudflare DDNS</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px 16px;
+    background: #f6f7f9;
+    color: #1c1f23;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: #6b7280; font-size: 13px; margin: 0; }
+  .card {
+    background: #fff;
+    border: 1px solid #e3e5e8;
+    border-radius: 8px;
+    padding: 20px;
+  }
+  .status-row { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; }
+  .status-item { font-size: 13px; color: #444; }
+  .status-item strong { color: #111; font-weight: 600; }
+  .pill {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .pill.ok { background: #e6f6ea; color: #1a7f37; }
+  .pill.bad { background: #fdeaea; color: #c22b2b; }
+  .pill.neutral { background: #eef0f2; color: #555; }
+  .pill.busy { background: #fff4e0; color: #93590c; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 16px 0 6px; }
+  label:first-of-type { margin-top: 0; }
+  input[type="password"], textarea {
+    width: 100%;
+    font-family: inherit;
+    font-size: 14px;
+    padding: 8px 10px;
+    border: 1px solid #d4d7dc;
+    border-radius: 6px;
+    background: #fff;
+    color: #1c1f23;
+  }
+  textarea { resize: vertical; min-height: 72px; font-family: ui-monospace, Consolas, monospace; }
+  .hint { font-size: 12px; color: #8a8f98; margin-top: 4px; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+  .checkbox-row label { margin: 0; }
+  .actions { display: flex; gap: 10px; align-items: center; margin-top: 20px; }
+  button {
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    cursor: pointer;
+  }
+  button.primary { background: #f6821f; color: #fff; }
+  button.primary:disabled { background: #f8c391; cursor: default; }
+  button.secondary { background: #fff; border-color: #d4d7dc; color: #333; }
+  button.secondary:disabled { color: #aaa; cursor: default; }
+  .error-box {
+    background: #fdeaea;
+    color: #a12626;
+    border: 1px solid #f3c2c2;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    margin-top: 12px;
+    display: none;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid #eee; }
+  th { color: #8a8f98; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  tr:last-child td { border-bottom: none; }
+  pre.log {
+    background: #16181d;
+    color: #d7dadf;
+    border-radius: 6px;
+    padding: 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    max-height: 220px;
+    overflow: auto;
+    margin: 0;
+    white-space: pre;
+  }
+  .card h2 { font-size: 14px; margin: 0 0 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>Cloudflare DDNS</h1>
+    <p class="sub">Manages A records for your domains from this box's public IPv4.</p>
+  </div>
+
+  <div class="card">
+    <h2>Status</h2>
+    <div class="status-row">
+      <span class="status-item">Public IP: <strong id="publicIp">—</strong></span>
+      <span class="status-item">Last run: <strong id="lastRun">—</strong></span>
+      <span class="status-item">Next run: <strong id="nextRun">—</strong></span>
+      <span id="statePill" class="pill neutral">idle</span>
+    </div>
+    <div class="actions">
+      <button id="updateNowBtn" class="secondary" type="button">Update now</button>
+    </div>
+    <table id="recordsTable" style="margin-top:16px; display:none;">
+      <thead><tr><th>Domain</th><th>Status</th><th>Detail</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Settings</h2>
+    <form id="configForm">
+      <label for="apiToken">Cloudflare API token</label>
+      <input type="password" id="apiToken" name="apiToken" autocomplete="off" placeholder="unchanged" />
+      <div class="hint" id="tokenHint"></div>
+
+      <label for="domains">Domains (one per line)</label>
+      <textarea id="domains" name="domains" placeholder="example.org&#10;www.example.org"></textarea>
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="proxied" name="proxied" />
+        <label for="proxied" style="margin:0;">Proxied through Cloudflare</label>
+      </div>
+
+      <div class="actions">
+        <button type="submit" id="saveBtn" class="primary">Save</button>
+      </div>
+      <div class="error-box" id="errorBox"></div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Activity log</h2>
+    <pre class="log" id="logBox">—</pre>
+  </div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const form = $("configForm");
+  const errorBox = $("errorBox");
+  const saveBtn = $("saveBtn");
+  const updateNowBtn = $("updateNowBtn");
+
+  function showError(message) {
+    errorBox.textContent = message;
+    errorBox.style.display = message ? "block" : "none";
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return "—";
+    return new Date(iso).toLocaleString();
+  }
+
+  async function loadConfig() {
+    const res = await fetch("/api/config");
+    const data = await res.json();
+    $("domains").value = (data.domains || []).join("\n");
+    $("proxied").checked = Boolean(data.proxied);
+    $("tokenHint").textContent = data.tokenSet
+      ? `Currently set, ends in "${data.tokenHint}". Leave blank to keep it.`
+      : "No token saved yet.";
+  }
+
+  function renderRecords(records) {
+    const table = $("recordsTable");
+    const tbody = table.querySelector("tbody");
+    tbody.innerHTML = "";
+    if (!records || records.length === 0) {
+      table.style.display = "none";
+      return;
+    }
+    table.style.display = "";
+    for (const r of records) {
+      const tr = document.createElement("tr");
+      const pillClass = r.status === "error" ? "bad" : r.status === "up to date" ? "neutral" : "ok";
+      tr.innerHTML = `<td>${r.domain}</td>` +
+        `<td><span class="pill ${pillClass}">${r.status}</span></td>` +
+        `<td>${r.message || ""}</td>`;
+      tbody.appendChild(tr);
+    }
+  }
+
+  async function refreshStatus() {
+    const res = await fetch("/api/status");
+    const data = await res.json();
+    $("publicIp").textContent = data.publicIp || "unknown";
+    $("lastRun").textContent = fmtTime(data.lastRun);
+    $("nextRun").textContent = fmtTime(data.nextRun);
+
+    const pill = $("statePill");
+    if (data.isRunning) {
+      pill.textContent = "updating…";
+      pill.className = "pill busy";
+    } else if (!data.lastRun) {
+      pill.textContent = "not configured";
+      pill.className = "pill neutral";
+    } else if (data.records && data.records.some((r) => r.status === "error")) {
+      pill.textContent = "error";
+      pill.className = "pill bad";
+    } else {
+      pill.textContent = "running";
+      pill.className = "pill ok";
+    }
+
+    renderRecords(data.records);
+
+    const logBox = $("logBox");
+    logBox.textContent = (data.logs || [])
+      .map((l) => `[${l.ts}] ${l.level.toUpperCase()} ${l.message}`)
+      .join("\n") || "—";
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    showError("");
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving…";
+    try {
+      const domains = $("domains").value
+        .split("\n")
+        .map((d) => d.trim())
+        .filter(Boolean);
+      const body = {
+        domains,
+        proxied: $("proxied").checked,
+        apiToken: $("apiToken").value.trim(),
+      };
+      const res = await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showError(data.error || "Save failed.");
+        return;
+      }
+      $("apiToken").value = "";
+      await loadConfig();
+      await refreshStatus();
+    } catch (err) {
+      showError(err.message || String(err));
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save";
+    }
+  });
+
+  updateNowBtn.addEventListener("click", async () => {
+    updateNowBtn.disabled = true;
+    updateNowBtn.textContent = "Updating…";
+    try {
+      await fetch("/api/update", { method: "POST" });
+      await refreshStatus();
+    } finally {
+      updateNowBtn.disabled = false;
+      updateNowBtn.textContent = "Update now";
+    }
+  });
+
+  loadConfig();
+  refreshStatus();
+  setInterval(refreshStatus, 10_000);
+</script>
+</body>
+</html>
