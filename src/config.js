@@ -1,6 +1,6 @@
 // Atomic read/write of the JSON config file that holds the settings this app
-// manages: the stored Cloudflare API tokens (each with an alias), the domain
-// list (each domain pointing at one token), and whether records are proxied.
+// manages: the stored Cloudflare API tokens (each with an alias) and the
+// domain list (each domain pointing at one token, with its own proxied flag).
 
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -11,15 +11,18 @@ const CONFIG_PATH = path.join(DATA_DIR, "config.json");
 const TMP_PATH = `${CONFIG_PATH}.tmp`;
 
 // tokens:  [{ id, alias, token }]
-// domains: [{ name, tokenId }]
-const DEFAULT_CONFIG = { tokens: [], domains: [], proxied: false };
+// domains: [{ name, tokenId, proxied }]
+const DEFAULT_CONFIG = { tokens: [], domains: [] };
 
 let current = structuredClone(DEFAULT_CONFIG);
 let loaded = false;
 
-// Older configs had a single top-level apiToken and domains as plain strings.
-// Convert those into one "default" token that every domain points at.
+// Older configs had a single top-level apiToken, domains as plain strings,
+// and one global proxied flag. Convert those into one "default" token that
+// every domain points at, and copy the global flag onto each domain.
 function normalize(parsed) {
+  const legacyProxied = typeof parsed.proxied === "boolean" ? parsed.proxied : true;
+
   const tokens = Array.isArray(parsed.tokens)
     ? parsed.tokens.filter(
         (t) => t && typeof t.id === "string" && typeof t.token === "string" && t.token
@@ -36,22 +39,26 @@ function normalize(parsed) {
     ? parsed.domains
         .map((d) =>
           typeof d === "string"
-            ? { name: d, tokenId: legacyId }
+            ? { name: d, tokenId: legacyId, proxied: legacyProxied }
             : d && typeof d.name === "string"
-              ? { name: d.name, tokenId: typeof d.tokenId === "string" ? d.tokenId : null }
+              ? {
+                  name: d.name,
+                  tokenId: typeof d.tokenId === "string" ? d.tokenId : null,
+                  proxied: typeof d.proxied === "boolean" ? d.proxied : legacyProxied,
+                }
               : null
         )
         .filter(Boolean)
     : [];
 
-  return { tokens, domains, proxied: Boolean(parsed.proxied) };
+  return { tokens, domains };
 }
 
 export async function load() {
   try {
     const raw = await fs.readFile(CONFIG_PATH, "utf8");
     const parsed = JSON.parse(raw);
-    const migrated = typeof parsed.apiToken === "string";
+    const migrated = typeof parsed.apiToken === "string" || "proxied" in parsed;
     current = normalize(parsed);
     if (migrated) await write(current);
   } catch (err) {
@@ -87,7 +94,6 @@ export function save(nextOrFn) {
     const merged = {
       tokens: next.tokens ?? current.tokens,
       domains: next.domains ?? current.domains,
-      proxied: next.proxied ?? current.proxied,
     };
     await write(merged);
     current = merged;

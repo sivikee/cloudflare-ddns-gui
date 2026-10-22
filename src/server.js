@@ -23,7 +23,11 @@ if (!AUTH_USER || !AUTH_PASSWORD) {
 const app = express();
 app.disable("x-powered-by");
 
-// --- Basic auth, in front of everything below ------------------------------
+const PUBLIC_DIR = path.join(__dirname, "..", "public");
+
+app.use(express.json());
+
+// --- Session login, in front of everything below ---------------------------
 
 function sha256(str) {
   return crypto.createHash("sha256").update(str).digest();
@@ -35,28 +39,116 @@ function timingSafeEqualStr(a, b) {
   return crypto.timingSafeEqual(sha256(a), sha256(b));
 }
 
-app.use((req, res, next) => {
-  const header = req.headers.authorization || "";
-  const [scheme, encoded] = header.split(" ");
+// Sessions live in memory only, so a restart logs everyone out — fine for a
+// single-user admin page.
+const SESSION_COOKIE = "ddns_session";
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const sessions = new Map(); // id -> expiresAt
 
-  if (scheme === "Basic" && encoded) {
-    const decoded = Buffer.from(encoded, "base64").toString("utf8");
-    const sepIndex = decoded.indexOf(":");
-    if (sepIndex !== -1) {
-      const user = decoded.slice(0, sepIndex);
-      const pass = decoded.slice(sepIndex + 1);
-      if (timingSafeEqualStr(user, AUTH_USER) && timingSafeEqualStr(pass, AUTH_PASSWORD)) {
-        return next();
-      }
+function sessionFrom(req) {
+  const cookies = req.headers.cookie || "";
+  for (const part of cookies.split(";")) {
+    const [name, ...rest] = part.trim().split("=");
+    if (name === SESSION_COOKIE) {
+      const id = rest.join("=");
+      const expiresAt = sessions.get(id);
+      if (expiresAt && expiresAt > Date.now()) return id;
+      sessions.delete(id);
+      return null;
     }
   }
+  return null;
+}
 
-  res.set("WWW-Authenticate", 'Basic realm="Cloudflare DDNS"');
-  res.status(401).send("Authentication required");
+function setSessionCookie(req, res, id, maxAgeMs) {
+  // Only mark the cookie Secure when served over HTTPS (directly or behind a
+  // TLS-terminating proxy), otherwise plain-HTTP LAN setups couldn't log in.
+  const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
+  res.cookie(SESSION_COOKIE, id, {
+    httpOnly: true,
+    sameSite: "strict",
+    secure,
+    path: "/",
+    maxAge: maxAgeMs,
+  });
+}
+
+// Simple per-IP brute-force guard on the login endpoint.
+const MAX_FAILED_LOGINS = 5;
+const FAILED_LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const failedLogins = new Map(); // ip -> { count, resetAt }
+
+function loginBlocked(ip) {
+  const entry = failedLogins.get(ip);
+  if (!entry) return false;
+  if (entry.resetAt <= Date.now()) {
+    failedLogins.delete(ip);
+    return false;
+  }
+  return entry.count >= MAX_FAILED_LOGINS;
+}
+
+function recordFailedLogin(ip) {
+  const entry = failedLogins.get(ip);
+  if (!entry || entry.resetAt <= Date.now()) {
+    failedLogins.set(ip, { count: 1, resetAt: Date.now() + FAILED_LOGIN_WINDOW_MS });
+  } else {
+    entry.count += 1;
+  }
+}
+
+app.get("/login", (req, res) => {
+  if (sessionFrom(req)) return res.redirect("/");
+  res.sendFile(path.join(PUBLIC_DIR, "login.html"));
 });
 
-app.use(express.json());
-app.use(express.static(path.join(__dirname, "..", "public")));
+app.post("/api/login", (req, res) => {
+  const ip = req.socket.remoteAddress || "unknown";
+  if (loginBlocked(ip)) {
+    return res.status(429).json({ error: "too many failed attempts — try again in 15 minutes" });
+  }
+
+  const { username, password } = req.body || {};
+  const ok =
+    typeof username === "string" &&
+    typeof password === "string" &&
+    // Evaluate both so a wrong username takes as long as a wrong password.
+    [timingSafeEqualStr(username, AUTH_USER), timingSafeEqualStr(password, AUTH_PASSWORD)].every(
+      Boolean
+    );
+
+  if (!ok) {
+    recordFailedLogin(ip);
+    log.warn(`failed login attempt from ${ip}`);
+    return res.status(401).json({ error: "invalid username or password" });
+  }
+
+  failedLogins.delete(ip);
+  for (const [id, expiresAt] of sessions) {
+    if (expiresAt <= Date.now()) sessions.delete(id);
+  }
+  const id = crypto.randomBytes(32).toString("base64url");
+  sessions.set(id, Date.now() + SESSION_TTL_MS);
+  setSessionCookie(req, res, id, SESSION_TTL_MS);
+  res.json({ ok: true });
+});
+
+app.post("/api/logout", (req, res) => {
+  const id = sessionFrom(req);
+  if (id) sessions.delete(id);
+  setSessionCookie(req, res, "", 0);
+  res.json({ ok: true });
+});
+
+app.use((req, res, next) => {
+  if (sessionFrom(req)) return next();
+  if (req.path.startsWith("/api/")) {
+    return res.status(401).json({ error: "not logged in" });
+  }
+  res.redirect("/login");
+});
+
+app.use(express.static(PUBLIC_DIR));
 
 // --- API ---------------------------------------------------------------
 
@@ -96,9 +188,13 @@ async function parseToken(raw) {
   return { token };
 }
 
+app.get("/api/me", (req, res) => {
+  res.json({ username: AUTH_USER });
+});
+
 app.get("/api/config", (req, res) => {
-  const { tokens, domains, proxied } = config.get();
-  res.json({ tokens: tokens.map(maskToken), domains, proxied });
+  const { tokens, domains } = config.get();
+  res.json({ tokens: tokens.map(maskToken), domains });
 });
 
 app.post("/api/tokens", async (req, res) => {
@@ -181,11 +277,12 @@ app.post("/api/config", async (req, res) => {
     const name = typeof d?.name === "string" ? d.name.trim().toLowerCase() : "";
     if (!name || seen.has(name)) continue;
     seen.add(name);
-    domains.push({ name, tokenId: typeof d.tokenId === "string" ? d.tokenId : null });
-  }
-
-  if (domains.length === 0) {
-    return res.status(400).json({ error: "at least one domain is required" });
+    domains.push({
+      name,
+      tokenId: typeof d.tokenId === "string" ? d.tokenId : null,
+      // Proxied unless explicitly turned off.
+      proxied: d.proxied !== false,
+    });
   }
 
   const invalid = domains.filter((d) => !HOSTNAME_RE.test(d.name));
@@ -202,10 +299,9 @@ app.post("/api/config", async (req, res) => {
     });
   }
 
-  const proxied = Boolean(body.proxied);
-
-  await config.save({ domains, proxied });
-  log.info(`configuration saved (${domains.length} domain(s), proxied=${proxied})`);
+  await config.save({ domains });
+  const proxiedCount = domains.filter((d) => d.proxied).length;
+  log.info(`configuration saved (${domains.length} domain(s), ${proxiedCount} proxied)`);
 
   const state = await updater.runOnce();
   res.json({ ok: true, records: state.records });

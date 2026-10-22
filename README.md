@@ -38,22 +38,27 @@ line in `docker-compose.yml` for `build: .`.
 
    To upgrade later: `docker compose pull && docker compose up -d`.
 
-3. Open `http://<your-server>:8080`, log in with the credentials from `.env`, and
-   fill in:
-   - **Domains** — add one row per domain, e.g. `home.example.org`, and pick the
-     API token it should use. Choose **+ New token…** in the dropdown to save a new
-     token under an alias (e.g. `personal`, `work`); it's verified with
-     Cloudflare before it's stored. Domains in different Cloudflare accounts can
-     use different tokens.
-   - **Proxied** — whether Cloudflare should proxy traffic (orange cloud) or just
-     resolve DNS (grey cloud).
+3. Open `http://<your-server>:8080` and log in with the credentials from `.env`.
+   The GUI has four tabs:
+   - **Dashboard** — public IP, number of domains, health of the last run, time
+     of the next run, and an **Update now** button.
+   - **Domains** — click **Add Domain**, enter e.g. `home.example.org`, pick the
+     Cloudflare API token it should use (or choose **+ New token…** to save a new
+     one under an alias like `personal` or `work`), and set **Proxied**
+     (orange cloud, on by default) or turn it off for DNS only (grey cloud).
+     Each domain has its own token and proxied setting, so domains in different
+     Cloudflare accounts can sit side by side. Use the ⋮ menu on a row to edit or
+     remove it — removing only stops managing it; the DNS record stays in
+     Cloudflare.
+   - **Cloudflare API Tokens** — add, rename, replace or delete saved tokens.
+     New tokens are verified with Cloudflare before they're stored. Once saved,
+     a token is never sent back to the browser — the GUI only ever sees its alias
+     and last 4 characters. A token can't be deleted while a domain uses it.
+   - **Activity Log** — recent updates and errors.
 
-   Saved tokens can be renamed, replaced or deleted under **API tokens**. Once
-   saved, a token is never sent back to the browser — the GUI only ever sees its
-   alias and last 4 characters. A token can't be deleted while a domain uses it.
-
-4. Click **Save**. It writes the config and immediately runs an update. After that it re-checks and reconciles on the interval set by
-   `UPDATE_INTERVAL_MINUTES` (default: every 5 minutes).
+4. Saving a domain writes the config and immediately runs an update. After that
+   it re-checks and reconciles on the interval set by `UPDATE_INTERVAL_MINUTES`
+   (default: every 5 minutes).
 
 ## Required Cloudflare token permissions
 
@@ -77,10 +82,15 @@ over the same DNS records.
 - Cloudflare API tokens are stored in plaintext in `data/config.json`
   (mode `0600`) so the updater can use it. Don't expose that volume, and don't
   commit it — it's already covered by `.gitignore`.
-- Login is plain HTTP Basic auth. If this GUI is reachable from anywhere you
-  don't fully trust (i.e. anything other than a private LAN/VPN), put it behind a
-  reverse proxy that terminates TLS — Basic auth sends credentials on every
-  request, in the clear, without HTTPS.
+- Login is a normal login page backed by an `HttpOnly`, `SameSite=Strict`
+  session cookie (valid for 7 days). Sessions are kept in memory, so restarting
+  the container logs you out. After 5 failed attempts from one IP, logins from it
+  are blocked for 15 minutes.
+- If this GUI is reachable from anywhere you don't fully trust (i.e. anything
+  other than a private LAN/VPN), put it behind a reverse proxy that terminates
+  TLS — without HTTPS the password and session cookie travel in the clear. The
+  cookie is marked `Secure` automatically when the proxy sends
+  `X-Forwarded-Proto: https`.
 - The container runs as root by default so it can write into the bind-mounted
   `./data` directory. If you'd rather run it as an unprivileged user, add
   `user: "1000:1000"` to `docker-compose.yml` and `chown -R 1000:1000 ./data` on
@@ -96,7 +106,8 @@ Environment variables (set in `.env`, read by `docker-compose.yml`):
 | `AUTH_PASSWORD`            | yes      | —       | GUI login password                    |
 | `UPDATE_INTERVAL_MINUTES`  | no       | `5`     | How often to reconcile DNS records    |
 
-Everything else (tokens, domains, proxied) is set through the GUI and stored in
+Everything else (tokens, domains, per-domain proxied) is set through the GUI and stored in
 `data/config.json`. A config from an older single-token version is migrated
 automatically on startup: the old token becomes one named `default` and every
-existing domain is assigned to it.
+existing domain is assigned to it. A global proxied setting from an older
+version is copied onto each domain.

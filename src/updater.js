@@ -67,8 +67,9 @@ export async function runOnce() {
     return state;
   }
 
-  const { domains, proxied } = config.get();
+  const { domains } = config.get();
   if (domains.length === 0) {
+    state.records = [];
     log.info("not configured yet (no domains) — skipping run");
     return state;
   }
@@ -105,7 +106,7 @@ export async function runOnce() {
     }
 
     const results = [];
-    for (const { name: domain, tokenId } of domains) {
+    for (const { name: domain, tokenId, proxied } of domains) {
       try {
         const token = config.tokenById(tokenId);
         if (!token) throw new Error("no API token assigned to this domain");

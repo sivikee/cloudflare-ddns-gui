@@ -5,199 +5,341 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Cloudflare DDNS</title>
 <style>
-  :root { color-scheme: light; }
+  :root {
+    color-scheme: light;
+    --bg: #f5f7fb;
+    --surface: #fff;
+    --border: #e6e8ec;
+    --text: #1c1f23;
+    --muted: #6e7687;
+    --faint: #9aa0ac;
+    --accent: #f6821f;
+    --accent-soft: #fff1e4;
+    --ok: #3fb950;
+    --bad: #d63939;
+    --warn: #c98a00;
+  }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    padding: 32px 16px;
-    background: #f6f7f9;
-    color: #1c1f23;
+    background: var(--bg);
+    color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
   }
-  .wrap { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
-  h1 { font-size: 18px; margin: 0 0 4px; }
-  .sub { color: #6b7280; font-size: 13px; margin: 0; }
+  .container { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+
+  /* --- Header + tabs ------------------------------------------------------ */
+  header.top { background: var(--surface); border-bottom: 1px solid var(--border); }
+  header.top .container { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 500; }
+  .brand svg { width: 32px; height: 32px; }
+  .user { display: flex; align-items: center; gap: 10px; }
+  .avatar {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: #c9ced6; color: #fff; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; text-transform: uppercase;
+  }
+  .user-name { font-size: 14px; line-height: 1.2; }
+  .user-role { font-size: 12px; color: var(--faint); }
+  .user button { margin-left: 8px; }
+
+  nav.tabs { background: var(--surface); border-bottom: 1px solid var(--border); }
+  nav.tabs .container { display: flex; gap: 4px; overflow-x: auto; }
+  nav.tabs a {
+    display: flex; align-items: center; gap: 6px;
+    padding: 16px 10px 14px;
+    color: var(--muted); text-decoration: none; white-space: nowrap;
+    border-bottom: 2px solid transparent;
+  }
+  nav.tabs a:hover { color: var(--text); }
+  nav.tabs a.active { color: var(--text); border-bottom-color: var(--accent); }
+  nav.tabs svg, .icon svg { width: 16px; height: 16px; }
+
+  main { padding: 24px 0 48px; }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* --- Cards + tables ----------------------------------------------------- */
   .card {
-    background: #fff;
-    border: 1px solid #e3e5e8;
-    border-radius: 8px;
-    padding: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--accent);
+    border-radius: 4px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.03);
+    margin-bottom: 20px;
   }
-  .status-row { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; }
-  .status-item { font-size: 13px; color: #444; }
-  .status-item strong { color: #111; font-weight: 600; }
-  .pill {
-    display: inline-block;
-    padding: 2px 10px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 600;
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 14px 24px; border-bottom: 1px solid var(--border);
   }
-  .pill.ok { background: #e6f6ea; color: #1a7f37; }
-  .pill.bad { background: #fdeaea; color: #c22b2b; }
-  .pill.neutral { background: #eef0f2; color: #555; }
-  .pill.busy { background: #fff4e0; color: #93590c; }
-  input[type="text"], input[type="password"], select {
-    font-family: inherit;
-    font-size: 14px;
-    padding: 7px 10px;
-    border: 1px solid #d4d7dc;
-    border-radius: 6px;
-    background: #fff;
-    color: #1c1f23;
-    min-width: 0;
+  .card-title { font-size: 17px; font-weight: 500; margin: 0; }
+  .card-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card-body { padding: 20px 24px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left; font-weight: 500; font-size: 12px; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--muted);
+    padding: 12px 24px; border-bottom: 1px solid var(--border); white-space: nowrap;
   }
-  .hint { font-size: 12px; color: #8a8f98; margin: 0 0 12px; }
-  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 13px; font-weight: 600; }
-  .actions { display: flex; gap: 10px; align-items: center; margin-top: 20px; }
-  button {
-    font-family: inherit;
-    font-size: 14px;
-    font-weight: 600;
-    padding: 7px 14px;
-    border-radius: 6px;
-    border: 1px solid transparent;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  button.primary { background: #f6821f; color: #fff; }
-  button.primary:disabled { background: #f8c391; cursor: default; }
-  button.secondary { background: #fff; border-color: #d4d7dc; color: #333; }
-  button.secondary:disabled { color: #aaa; cursor: default; }
-  button.link { background: none; border: none; color: #555; padding: 4px 6px; font-weight: 500; font-size: 13px; }
-  button.link:hover { color: #111; text-decoration: underline; }
-  button.link.danger:hover { color: #c22b2b; }
-  .error-box {
-    background: #fdeaea;
-    color: #a12626;
-    border: 1px solid #f3c2c2;
-    border-radius: 6px;
-    padding: 8px 12px;
-    font-size: 13px;
-    margin-top: 12px;
-    display: none;
-  }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid #eee; }
-  th { color: #8a8f98; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  td { padding: 14px 24px; border-bottom: 1px solid var(--border); vertical-align: middle; }
   tr:last-child td { border-bottom: none; }
+  td.actions-cell { width: 1%; text-align: right; position: relative; }
+  .empty-state { padding: 40px 24px; text-align: center; color: var(--muted); }
+
+  .chip {
+    display: inline-block; background: #eef0f3; color: #495057;
+    border-radius: 3px; padding: 3px 8px; font-size: 13px;
+  }
+  .subtext { font-size: 12px; color: var(--faint); margin-top: 6px; }
+  .mono { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  .status { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+  .dot.ok { background: var(--ok); }
+  .dot.bad { background: var(--bad); }
+  .dot.warn { background: var(--warn); }
+  .detail { font-size: 12px; color: var(--muted); margin-top: 4px; max-width: 360px; }
+  .cloud { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .cloud svg { width: 22px; height: 22px; }
+  .cloud.on svg { fill: var(--accent); }
+  .cloud.off svg { fill: #b7bdc6; }
+
+  .search {
+    display: flex; align-items: center; gap: 6px;
+    border: 1px solid var(--border); border-radius: 4px; padding: 0 10px; background: #fff;
+  }
+  .search svg { width: 15px; height: 15px; color: var(--faint); }
+  .search input { border: none; outline: none; padding: 7px 0; font: inherit; width: 180px; }
+
+  /* --- Dashboard stats ---------------------------------------------------- */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 20px; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
+    padding: 18px 20px; display: flex; align-items: center; gap: 16px;
+  }
+  .stat-icon {
+    width: 44px; height: 44px; border-radius: 4px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .stat-icon svg { width: 22px; height: 22px; }
+  .stat-value { font-size: 18px; font-weight: 600; }
+  .stat-label { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+  /* --- Buttons + forms ---------------------------------------------------- */
+  button {
+    font: inherit; font-weight: 500; cursor: pointer;
+    padding: 7px 14px; border-radius: 4px; border: 1px solid transparent; white-space: nowrap;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:disabled { opacity: .55; cursor: default; }
+  .btn-outline { background: #fff; border-color: var(--accent); color: var(--accent); }
+  .btn-outline:hover { background: var(--accent-soft); }
+  .btn-outline:disabled { opacity: .55; cursor: default; }
+  .btn-secondary { background: #fff; border-color: var(--border); color: #333; }
+  .btn-danger { background: var(--bad); color: #fff; }
+  .btn-link { background: none; border: none; color: var(--muted); padding: 4px 6px; }
+  .btn-link:hover { color: var(--text); }
+  .kebab { background: none; border: none; color: var(--faint); padding: 4px 8px; font-size: 18px; line-height: 1; }
+  .kebab:hover { color: var(--text); }
+
+  .menu {
+    position: fixed; z-index: 20;
+    background: #fff; border: 1px solid var(--border); border-radius: 4px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.08); min-width: 140px; padding: 4px 0; text-align: left;
+  }
+  .menu button { display: block; width: 100%; text-align: left; background: none; border: none; border-radius: 0; padding: 8px 14px; color: var(--text); }
+  .menu button:hover { background: #f4f5f7; }
+  .menu button.danger { color: var(--bad); }
+
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-weight: 500; margin-bottom: 6px; }
+  .field input[type="text"], .field input[type="password"], .field select {
+    width: 100%; font: inherit; padding: 8px 10px;
+    border: 1px solid #d6d9de; border-radius: 4px; background: #fff; color: var(--text);
+  }
+  .field input:focus, .field select:focus { outline: 2px solid #f6821f33; border-color: var(--accent); }
+  .field .hint { font-size: 12px; color: var(--faint); margin-top: 5px; }
+  .subform { border: 1px dashed #d6d9de; border-radius: 4px; padding: 14px 14px 0; margin-bottom: 16px; background: #fafbfc; }
+
+  .field label.switch { display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 500; margin: 0; }
+  .switch input { display: none; }
+  .switch .track { width: 38px; height: 22px; border-radius: 11px; background: #cfd3d9; position: relative; transition: background .15s; flex: none; }
+  .switch .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .15s; }
+  .switch input:checked + .track { background: var(--accent); }
+  .switch input:checked + .track::after { left: 19px; }
+
+  .error-box {
+    background: #fdeaea; color: #a12626; border: 1px solid #f3c2c2; border-radius: 4px;
+    padding: 8px 12px; font-size: 13px; margin-bottom: 16px; display: none;
+  }
+
+  /* --- Modal -------------------------------------------------------------- */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(20, 24, 31, .45); z-index: 50;
+    display: none; align-items: flex-start; justify-content: center; padding: 64px 16px; overflow-y: auto;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: #fff; border-radius: 4px; width: 100%; max-width: 480px; box-shadow: 0 12px 40px rgba(0,0,0,.18); }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid var(--border); }
+  .modal-header h3 { margin: 0; font-size: 16px; font-weight: 500; }
+  .modal-body { padding: 20px 24px 4px; }
+  .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 24px; border-top: 1px solid var(--border); }
+
   pre.log {
-    background: #16181d;
-    color: #d7dadf;
-    border-radius: 6px;
-    padding: 12px;
-    font-size: 12px;
-    line-height: 1.5;
-    max-height: 220px;
-    overflow: auto;
-    margin: 0;
-    white-space: pre;
+    margin: 0; background: #16181d; color: #d7dadf; border-radius: 0 0 4px 4px;
+    padding: 16px 24px; font-size: 12px; line-height: 1.6; max-height: 560px; overflow: auto; white-space: pre;
   }
-  .card h2 { font-size: 14px; margin: 0 0 4px; }
 
-  .list { display: flex; flex-direction: column; gap: 8px; }
-  .empty { font-size: 13px; color: #8a8f98; }
-  .token-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid #eee; }
-  .token-row:last-child { border-bottom: none; }
-  .token-alias { font-weight: 600; font-size: 14px; }
-  .token-mask { font-family: ui-monospace, Consolas, monospace; font-size: 13px; color: #6b7280; }
-  .token-row .spacer { flex: 1; }
-  .token-edit { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; }
-  .token-edit input { flex: 1 1 160px; }
-
-  .domain-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .domain-row .domain-name { flex: 2 1 220px; font-family: ui-monospace, Consolas, monospace; }
-  .domain-row select { flex: 1 1 160px; }
-  .new-token {
-    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
-    background: #fafbfc; border: 1px dashed #d4d7dc; border-radius: 6px;
-    padding: 10px; margin: -2px 0 4px;
+  @media (max-width: 640px) {
+    .user-name, .user-role { display: none; }
+    th, td { padding-left: 14px; padding-right: 14px; }
+    .card-header, .card-body { padding-left: 14px; padding-right: 14px; }
+    .search input { width: 120px; }
   }
-  .new-token input { flex: 1 1 160px; }
-  .new-token .error-box { flex-basis: 100%; margin-top: 0; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div>
-    <h1>Cloudflare DDNS</h1>
-    <p class="sub">Manages A records for your domains from this box's public IPv4.</p>
-  </div>
 
-  <div class="card">
-    <h2>Status</h2>
-    <div class="status-row" style="margin-top:12px;">
-      <span class="status-item">Public IP: <strong id="publicIp">—</strong></span>
-      <span class="status-item">Last run: <strong id="lastRun">—</strong></span>
-      <span class="status-item">Next run: <strong id="nextRun">—</strong></span>
-      <span id="statePill" class="pill neutral">idle</span>
+<header class="top">
+  <div class="container">
+    <div class="brand">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><path fill="#f6821f" d="M47.5 27.2A15.5 15.5 0 0 0 17.8 23 11.5 11.5 0 0 0 19.5 46h28a9.5 9.5 0 0 0 0-18.8Z"/><path fill="#fff" d="M30 31h5v-6l7 9-7 9v-6h-5a6 6 0 0 1 0-12h1v4h-1a2 2 0 0 0 0 4Z" opacity=".95"/></svg>
+      Cloudflare DDNS
     </div>
-    <div class="actions">
-      <button id="updateNowBtn" class="secondary" type="button">Update now</button>
+    <div class="user">
+      <div class="avatar" id="avatar">?</div>
+      <div>
+        <div class="user-name" id="userName">—</div>
+        <div class="user-role">Administrator</div>
+      </div>
+      <button type="button" class="btn-secondary" id="logoutBtn">Log out</button>
     </div>
-    <table id="recordsTable" style="margin-top:16px; display:none;">
-      <thead><tr><th>Domain</th><th>Status</th><th>Detail</th></tr></thead>
-      <tbody></tbody>
-    </table>
   </div>
+</header>
 
-  <div class="card">
-    <h2>Domains</h2>
-    <p class="hint">Each domain uses one API token. Pick a saved one, or choose “New token…” to add one.</p>
-    <form id="configForm">
-      <div class="list" id="domainList"></div>
-      <div class="actions" style="margin-top:12px;">
-        <button type="button" id="addDomainBtn" class="secondary">+ Add domain</button>
+<nav class="tabs">
+  <div class="container">
+    <a href="#dashboard" data-tab="dashboard"><span class="icon" data-icon="home"></span>Dashboard</a>
+    <a href="#domains" data-tab="domains"><span class="icon" data-icon="globe"></span>Domains</a>
+    <a href="#tokens" data-tab="tokens"><span class="icon" data-icon="key"></span>Cloudflare API Tokens</a>
+    <a href="#log" data-tab="log"><span class="icon" data-icon="book"></span>Activity Log</a>
+  </div>
+</nav>
+
+<main>
+  <div class="container">
+
+    <!-- Dashboard -->
+    <section class="view" id="view-dashboard">
+      <div class="stats">
+        <div class="stat"><div class="stat-icon" data-icon="wifi"></div><div><div class="stat-value mono" id="statIp">—</div><div class="stat-label">Public IPv4</div></div></div>
+        <div class="stat"><div class="stat-icon" data-icon="globe"></div><div><div class="stat-value" id="statDomains">0</div><div class="stat-label">Domains</div></div></div>
+        <div class="stat"><div class="stat-icon" data-icon="check"></div><div><div class="stat-value" id="statHealth">—</div><div class="stat-label" id="statHealthLabel">Last run</div></div></div>
+        <div class="stat"><div class="stat-icon" data-icon="clock"></div><div><div class="stat-value" id="statNext">—</div><div class="stat-label" id="statLast">Next run</div></div></div>
       </div>
 
-      <label class="checkbox-row">
-        <input type="checkbox" id="proxied" name="proxied" />
-        Proxied through Cloudflare
-      </label>
-
-      <div class="actions">
-        <button type="submit" id="saveBtn" class="primary">Save</button>
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Last run</h2>
+          <div class="card-tools">
+            <button type="button" class="btn-outline" id="updateNowBtn">Update now</button>
+          </div>
+        </div>
+        <div class="table-wrap" id="recordsWrap"></div>
       </div>
-      <div class="error-box" id="errorBox"></div>
+    </section>
+
+    <!-- Domains -->
+    <section class="view" id="view-domains">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Domains</h2>
+          <div class="card-tools">
+            <label class="search"><span data-icon="search"></span><input type="search" id="domainSearch" placeholder="Search domain…" /></label>
+            <button type="button" class="btn-outline" id="addDomainBtn">Add Domain</button>
+          </div>
+        </div>
+        <div class="table-wrap" id="domainsWrap"></div>
+      </div>
+    </section>
+
+    <!-- Tokens -->
+    <section class="view" id="view-tokens">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Cloudflare API Tokens</h2>
+          <div class="card-tools">
+            <label class="search"><span data-icon="search"></span><input type="search" id="tokenSearch" placeholder="Search token…" /></label>
+            <button type="button" class="btn-outline" id="addTokenBtn">Add Token</button>
+          </div>
+        </div>
+        <div class="table-wrap" id="tokensWrap"></div>
+      </div>
+    </section>
+
+    <!-- Log -->
+    <section class="view" id="view-log">
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Activity Log</h2></div>
+        <pre class="log" id="logBox">—</pre>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-header">
+      <h3 id="modalTitle"></h3>
+      <button type="button" class="btn-link" id="modalClose" aria-label="Close">✕</button>
+    </div>
+    <form id="modalForm">
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" id="modalCancel">Cancel</button>
+        <button type="submit" class="btn-primary" id="modalSubmit">Save</button>
+      </div>
     </form>
-  </div>
-
-  <div class="card">
-    <h2>API tokens</h2>
-    <p class="hint">Saved tokens are never shown again — only the last 4 characters.</p>
-    <div class="list" id="tokenList"></div>
-    <div class="error-box" id="tokenErrorBox"></div>
-  </div>
-
-  <div class="card">
-    <h2>Activity log</h2>
-    <pre class="log" id="logBox">—</pre>
   </div>
 </div>
 
 <script>
   const $ = (id) => document.getElementById(id);
-  const form = $("configForm");
-  const errorBox = $("errorBox");
-  const saveBtn = $("saveBtn");
-  const updateNowBtn = $("updateNowBtn");
-  const domainList = $("domainList");
-  const tokenList = $("tokenList");
+
+  const ICONS = {
+    home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg>',
+    globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18"/></svg>',
+    key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 8.2-8.2"/><path d="m16 7 2 2"/><path d="m18.5 4.5 2 2"/></svg>',
+    book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2Z"/><path d="M4 19V5"/><path d="M8 7h7"/></svg>',
+    wifi: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8.5a15 15 0 0 1 20 0"/><path d="M5 12a10.5 10.5 0 0 1 14 0"/><path d="M8.5 15.5a5.5 5.5 0 0 1 7 0"/><circle cx="12" cy="19" r="1"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>',
+    clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>',
+    cloud: '<svg viewBox="0 0 24 24"><path d="M18.5 10.2A6.5 6.5 0 0 0 6.1 8.6 4.8 4.8 0 0 0 6.8 18.2h11.7a4 4 0 0 0 0-8Z"/></svg>',
+  };
+  for (const node of document.querySelectorAll("[data-icon]")) node.innerHTML = ICONS[node.dataset.icon];
 
   const NEW_TOKEN = "__new__";
-  let tokens = []; // [{ id, alias, masked }] — never the secret itself
+  let tokens = [];   // [{ id, alias, masked }] — never the secret itself
+  let domains = [];  // [{ name, tokenId, proxied }]
+  let status = { records: [], logs: [] };
 
   function el(tag, props = {}, children = []) {
     const node = document.createElement(tag);
-    Object.assign(node, props);
-    for (const child of [].concat(children)) {
-      node.append(child);
+    for (const [key, value] of Object.entries(props)) {
+      if (key === "dataset") Object.assign(node.dataset, value);
+      else if (key === "html") node.innerHTML = value; // only ever static icon markup
+      else node[key] = value;
     }
+    for (const child of [].concat(children)) if (child != null) node.append(child);
     return node;
   }
 
   function showError(box, message) {
-    box.textContent = message;
+    box.textContent = message || "";
     box.style.display = message ? "block" : "none";
   }
 
@@ -206,289 +348,450 @@
     return new Date(iso).toLocaleString();
   }
 
+  function fmtRelative(iso) {
+    if (!iso) return "—";
+    const diff = Math.round((new Date(iso).getTime() - Date.now()) / 60000);
+    if (Math.abs(diff) < 1) return "now";
+    return diff > 0 ? `in ${diff} min` : `${-diff} min ago`;
+  }
+
   async function api(url, options = {}) {
     const res = await fetch(url, {
       ...options,
       headers: options.body ? { "Content-Type": "application/json" } : undefined,
     });
+    if (res.status === 401) {
+      // Session expired or server restarted — back to the login page.
+      location.replace("/login");
+      throw new Error("not logged in");
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `request failed (HTTP ${res.status})`);
     return data;
   }
 
-  // --- Tokens -------------------------------------------------------------
+  const tokenAlias = (id) => tokens.find((t) => t.id === id)?.alias;
+  const recordFor = (name) => status.records?.find((r) => r.domain === name);
 
-  function renderTokens() {
-    tokenList.replaceChildren();
-    if (tokens.length === 0) {
-      tokenList.append(el("div", { className: "empty", textContent: "No tokens saved yet." }));
+  // --- Tabs ---------------------------------------------------------------
+
+  const TABS = ["dashboard", "domains", "tokens", "log"];
+
+  function showTab() {
+    const tab = TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "dashboard";
+    for (const a of document.querySelectorAll("nav.tabs a")) {
+      a.classList.toggle("active", a.dataset.tab === tab);
     }
-    for (const t of tokens) tokenList.append(tokenRow(t));
-    for (const select of domainList.querySelectorAll("select")) fillTokenSelect(select);
+    for (const name of TABS) $(`view-${name}`).classList.toggle("active", name === tab);
+    closeMenus();
+  }
+  window.addEventListener("hashchange", showTab);
+
+  // --- Row menus ----------------------------------------------------------
+
+  function closeMenus() {
+    for (const m of document.querySelectorAll(".menu")) m.remove();
+  }
+  document.addEventListener("click", closeMenus);
+  window.addEventListener("scroll", closeMenus, true);
+  window.addEventListener("resize", closeMenus);
+
+  function rowMenu(items) {
+    const cell = el("td", { className: "actions-cell" });
+    const btn = el("button", { type: "button", className: "kebab", textContent: "⋮", ariaLabel: "Actions" });
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const wasOpen = cell.querySelector(".menu");
+      closeMenus();
+      if (wasOpen) return;
+      const menu = el("div", { className: "menu" }, items.map(([label, fn, danger]) => {
+        const item = el("button", { type: "button", textContent: label, className: danger ? "danger" : "" });
+        item.onclick = (ev) => { ev.stopPropagation(); closeMenus(); fn(); };
+        return item;
+      }));
+      // Fixed to the viewport so the table's scroll container can't clip it;
+      // flips upward when there's no room below.
+      cell.append(menu);
+      const r = btn.getBoundingClientRect();
+      const below = r.bottom + 4 + menu.offsetHeight <= window.innerHeight;
+      menu.style.top = `${below ? r.bottom + 4 : r.top - 4 - menu.offsetHeight}px`;
+      menu.style.left = `${Math.max(8, r.right - menu.offsetWidth)}px`;
+    };
+    cell.append(btn);
+    return cell;
   }
 
-  function tokenRow(t) {
-    const row = el("div", { className: "token-row" });
+  // --- Modal --------------------------------------------------------------
 
-    function showView() {
-      const editBtn = el("button", { type: "button", className: "link", textContent: "Edit" });
-      const delBtn = el("button", { type: "button", className: "link danger", textContent: "Delete" });
-      editBtn.onclick = showEdit;
-      delBtn.onclick = async () => {
-        if (!confirm(`Delete token "${t.alias}"?`)) return;
-        showError($("tokenErrorBox"), "");
-        try {
-          await api(`/api/tokens/${t.id}`, { method: "DELETE" });
-          tokens = tokens.filter((x) => x.id !== t.id);
-          renderTokens();
-        } catch (err) {
-          showError($("tokenErrorBox"), err.message);
-        }
-      };
-      row.replaceChildren(
-        el("span", { className: "token-alias", textContent: t.alias }),
-        el("span", { className: "token-mask", textContent: t.masked }),
-        el("span", { className: "spacer" }),
-        editBtn,
-        delBtn
-      );
+  let modalSubmitHandler = null;
+
+  function openModal({ title, body, submitLabel = "Save", danger = false, onSubmit }) {
+    $("modalTitle").textContent = title;
+    $("modalBody").replaceChildren(...[].concat(body));
+    const submit = $("modalSubmit");
+    submit.textContent = submitLabel;
+    submit.className = danger ? "btn-danger" : "btn-primary";
+    submit.disabled = false;
+    modalSubmitHandler = onSubmit;
+    $("modalBackdrop").classList.add("open");
+    $("modalBody").querySelector("input, select")?.focus();
+  }
+
+  function closeModal() {
+    $("modalBackdrop").classList.remove("open");
+    $("modalBody").replaceChildren();
+    modalSubmitHandler = null;
+  }
+
+  $("modalClose").onclick = closeModal;
+  $("modalCancel").onclick = closeModal;
+  $("modalBackdrop").addEventListener("mousedown", (e) => {
+    if (e.target === $("modalBackdrop")) closeModal();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && $("modalBackdrop").classList.contains("open")) closeModal();
+  });
+
+  $("modalForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!modalSubmitHandler) return;
+    const submit = $("modalSubmit");
+    const label = submit.textContent;
+    submit.disabled = true;
+    submit.textContent = "Saving…";
+    try {
+      await modalSubmitHandler();
+      closeModal();
+    } catch (err) {
+      const box = $("modalBody").querySelector(".error-box");
+      if (box) showError(box, err.message);
+      submit.disabled = false;
+      submit.textContent = label;
     }
+  });
 
-    function showEdit() {
-      const aliasInput = el("input", { type: "text", value: t.alias, placeholder: "Alias" });
-      const tokenInput = el("input", {
-        type: "password", autocomplete: "off", placeholder: "New token (leave blank to keep)",
-      });
-      const saveTokBtn = el("button", { type: "button", className: "secondary", textContent: "Save" });
-      const cancelBtn = el("button", { type: "button", className: "link", textContent: "Cancel" });
-      cancelBtn.onclick = showView;
-      saveTokBtn.onclick = async () => {
-        showError($("tokenErrorBox"), "");
-        saveTokBtn.disabled = true;
-        try {
-          const updated = await api(`/api/tokens/${t.id}`, {
-            method: "PATCH",
-            body: JSON.stringify({ alias: aliasInput.value, token: tokenInput.value }),
-          });
-          tokens = tokens.map((x) => (x.id === t.id ? updated : x));
-          renderTokens();
-        } catch (err) {
-          showError($("tokenErrorBox"), err.message);
-          saveTokBtn.disabled = false;
-        }
-      };
-      row.replaceChildren(
-        el("div", { className: "token-edit" }, [aliasInput, tokenInput, saveTokBtn, cancelBtn])
-      );
-      aliasInput.focus();
-    }
+  function field(labelText, input, hint) {
+    return el("div", { className: "field" }, [
+      el("label", { textContent: labelText }),
+      input,
+      hint ? el("div", { className: "hint", textContent: hint }) : null,
+    ]);
+  }
 
-    showView();
-    return row;
+  function switchInput(labelText, checked) {
+    const input = el("input", { type: "checkbox", checked });
+    const label = el("label", { className: "switch" }, [input, el("span", { className: "track" }), labelText]);
+    return { input, node: el("div", { className: "field" }, label) };
+  }
+
+  function confirmModal(title, message, confirmLabel, onConfirm) {
+    openModal({
+      title,
+      body: [el("div", { className: "error-box" }), el("p", { textContent: message, style: "margin:0 0 16px" })],
+      submitLabel: confirmLabel,
+      danger: true,
+      onSubmit: onConfirm,
+    });
   }
 
   // --- Domains ------------------------------------------------------------
 
-  function fillTokenSelect(select) {
-    const value = select.value === NEW_TOKEN ? NEW_TOKEN : select.value || select.dataset.tokenId || "";
-    select.replaceChildren(
+  async function saveDomains(next) {
+    const data = await api("/api/config", { method: "POST", body: JSON.stringify({ domains: next }) });
+    domains = next;
+    status.records = data.records;
+    renderAll();
+    refreshStatus().catch(() => {});
+  }
+
+  async function createToken(alias, token) {
+    const created = await api("/api/tokens", {
+      method: "POST",
+      body: JSON.stringify({ alias, token }),
+    });
+    tokens.push(created);
+    renderAll();
+    return created;
+  }
+
+  function domainModal(existing) {
+    const errorBox = el("div", { className: "error-box" });
+    const nameInput = el("input", { type: "text", value: existing?.name || "", placeholder: "home.example.org" });
+
+    const select = el("select", {}, [
       el("option", { value: "", textContent: "— select token —", disabled: true }),
       ...tokens.map((t) => el("option", { value: t.id, textContent: `${t.alias} (${t.masked})` })),
-      el("option", { value: NEW_TOKEN, textContent: "+ New token…" })
-    );
-    if (value === NEW_TOKEN) {
-      select.value = NEW_TOKEN;
-    } else if (tokens.some((t) => t.id === value)) {
-      select.value = value;
-      select.dataset.tokenId = value;
-    } else {
-      select.value = "";
-      select.dataset.tokenId = "";
-    }
-  }
+      el("option", { value: NEW_TOKEN, textContent: "+ New token…" }),
+    ]);
+    select.value = existing?.tokenId && tokenAlias(existing.tokenId)
+      ? existing.tokenId
+      : tokens.length === 0 ? NEW_TOKEN : tokens.length === 1 ? tokens[0].id : "";
 
-  function addDomainRow(domain = { name: "", tokenId: null }) {
-    const wrapper = el("div");
-    const nameInput = el("input", {
-      type: "text", className: "domain-name", value: domain.name, placeholder: "home.example.org",
-    });
-    const select = el("select");
-    select.dataset.tokenId = domain.tokenId || (tokens.length === 1 ? tokens[0].id : "");
-    fillTokenSelect(select);
-    const removeBtn = el("button", { type: "button", className: "link danger", textContent: "Remove" });
-    removeBtn.onclick = () => wrapper.remove();
+    const newAlias = el("input", { type: "text", placeholder: "e.g. personal" });
+    const newToken = el("input", { type: "password", autocomplete: "off", placeholder: "Cloudflare API token" });
+    const subform = el("div", { className: "subform" }, [
+      field("Token alias", newAlias),
+      field("API token", newToken, "Needs Zone:Read and DNS:Edit. Verified with Cloudflare before saving."),
+    ]);
+    const syncSubform = () => { subform.style.display = select.value === NEW_TOKEN ? "" : "none"; };
+    select.onchange = syncSubform;
+    syncSubform();
 
-    let newTokenPanel = null;
-    select.onchange = () => {
-      if (select.value !== NEW_TOKEN) {
-        select.dataset.tokenId = select.value;
-        newTokenPanel?.remove();
-        newTokenPanel = null;
-        return;
-      }
-      if (newTokenPanel) return;
-      newTokenPanel = newTokenForm(
-        (created) => {
-          tokens.push(created);
-          select.dataset.tokenId = created.id;
-          select.value = "";
-          renderTokens();
-          newTokenPanel.remove();
-          newTokenPanel = null;
-        },
-        () => {
-          select.value = "";
-          fillTokenSelect(select);
-          newTokenPanel.remove();
-          newTokenPanel = null;
+    const proxied = switchInput("Proxied through Cloudflare", existing ? existing.proxied !== false : true);
+
+    openModal({
+      title: existing ? "Edit Domain" : "Add Domain",
+      body: [
+        errorBox,
+        field("Domain name", nameInput),
+        field("API token", select),
+        subform,
+        proxied.node,
+      ],
+      onSubmit: async () => {
+        showError(errorBox, "");
+        const name = nameInput.value.trim().toLowerCase();
+        if (!name) throw new Error("domain name is required");
+        if (domains.some((d) => d.name === name && d !== existing)) {
+          throw new Error(`${name} is already in the list`);
         }
-      );
-      wrapper.append(newTokenPanel);
-      newTokenPanel.querySelector("input").focus();
-    };
+        if (!select.value) throw new Error("pick an API token");
 
-    wrapper.append(el("div", { className: "domain-row" }, [nameInput, select, removeBtn]));
-    domainList.append(wrapper);
-    return wrapper;
+        let tokenId = select.value;
+        if (tokenId === NEW_TOKEN) {
+          const created = await createToken(newAlias.value, newToken.value);
+          tokenId = created.id;
+          // If the domain save fails below, keep the new token selected.
+          select.insertBefore(
+            el("option", { value: created.id, textContent: `${created.alias} (${created.masked})` }),
+            select.lastChild
+          );
+          select.value = created.id;
+          syncSubform();
+        }
+
+        const entry = { name, tokenId, proxied: proxied.input.checked };
+        const next = existing
+          ? domains.map((d) => (d === existing ? entry : d))
+          : [...domains, entry];
+        await saveDomains(next);
+      },
+    });
   }
 
-  function newTokenForm(onCreated, onCancel) {
-    const aliasInput = el("input", { type: "text", placeholder: "Alias, e.g. personal" });
-    const tokenInput = el("input", { type: "password", autocomplete: "off", placeholder: "Cloudflare API token" });
-    const addBtn = el("button", { type: "button", className: "secondary", textContent: "Save token" });
-    const cancelBtn = el("button", { type: "button", className: "link", textContent: "Cancel" });
-    const err = el("div", { className: "error-box" });
+  function renderDomains() {
+    const q = $("domainSearch").value.trim().toLowerCase();
+    const rows = domains.filter((d) => !q || d.name.includes(q));
+    const wrap = $("domainsWrap");
 
-    cancelBtn.onclick = onCancel;
-    addBtn.onclick = async () => {
-      showError(err, "");
-      addBtn.disabled = true;
-      addBtn.textContent = "Verifying…";
-      try {
-        const created = await api("/api/tokens", {
-          method: "POST",
-          body: JSON.stringify({ alias: aliasInput.value, token: tokenInput.value }),
-        });
-        tokenInput.value = "";
-        onCreated(created);
-      } catch (e) {
-        showError(err, e.message);
-        addBtn.disabled = false;
-        addBtn.textContent = "Save token";
-      }
-    };
+    if (rows.length === 0) {
+      wrap.replaceChildren(el("div", { className: "empty-state", textContent:
+        domains.length === 0 ? "No domains yet — click “Add Domain” to add one." : "No domains match your search." }));
+      return;
+    }
 
-    return el("div", { className: "new-token" }, [aliasInput, tokenInput, addBtn, cancelBtn, err]);
+    const tbody = el("tbody", {}, rows.map((d) => {
+      const rec = recordFor(d.name);
+      const dotClass = !rec ? "" : rec.status === "error" ? "bad" : "ok";
+      const label = !rec ? "Pending" : rec.status === "error" ? "Error" : rec.status === "up to date" ? "Up to date" : rec.status[0].toUpperCase() + rec.status.slice(1);
+      return el("tr", {}, [
+        el("td", {}, [el("span", { className: "chip", textContent: d.name })]),
+        el("td", {}, tokenAlias(d.tokenId) || el("span", { style: "color:var(--bad)", textContent: "missing" })),
+        el("td", {}, el("span", { className: `cloud ${d.proxied ? "on" : "off"}`, html: ICONS.cloud },
+          [d.proxied ? "Proxied" : "DNS only"])),
+        el("td", {}, [
+          el("span", { className: "status" }, [el("span", { className: `dot ${dotClass}` }), label]),
+          rec?.status === "error" ? el("div", { className: "detail", textContent: rec.message }) : null,
+        ]),
+        rowMenu([
+          ["Edit", () => domainModal(d)],
+          ["Delete", () => confirmModal("Delete Domain", `Stop managing ${d.name}? The DNS record itself is left in Cloudflare.`, "Delete",
+            () => saveDomains(domains.filter((x) => x !== d))), true],
+        ]),
+      ]);
+    }));
+
+    wrap.replaceChildren(el("table", {}, [
+      el("thead", {}, el("tr", {}, ["Domain", "Token", "Proxy", "Status", ""].map((h) => el("th", { textContent: h })))),
+      tbody,
+    ]));
+  }
+
+  // --- Tokens -------------------------------------------------------------
+
+  function tokenModal(existing) {
+    const errorBox = el("div", { className: "error-box" });
+    const aliasInput = el("input", { type: "text", value: existing?.alias || "", placeholder: "e.g. personal" });
+    const tokenInput = el("input", {
+      type: "password", autocomplete: "off",
+      placeholder: existing ? "Leave blank to keep the current token" : "Cloudflare API token",
+    });
+
+    openModal({
+      title: existing ? "Edit Token" : "Add Token",
+      body: [
+        errorBox,
+        field("Alias", aliasInput),
+        field("API token", tokenInput, existing
+          ? `Current: ${existing.masked}. Saved tokens are never shown again.`
+          : "Needs Zone:Read and DNS:Edit. Verified with Cloudflare before saving."),
+      ],
+      onSubmit: async () => {
+        showError(errorBox, "");
+        if (existing) {
+          const updated = await api(`/api/tokens/${existing.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ alias: aliasInput.value, token: tokenInput.value }),
+          });
+          tokens = tokens.map((t) => (t.id === existing.id ? updated : t));
+          renderAll();
+        } else {
+          await createToken(aliasInput.value, tokenInput.value);
+        }
+      },
+    });
+  }
+
+  function renderTokens() {
+    const q = $("tokenSearch").value.trim().toLowerCase();
+    const rows = tokens.filter((t) => !q || t.alias.toLowerCase().includes(q));
+    const wrap = $("tokensWrap");
+
+    if (rows.length === 0) {
+      wrap.replaceChildren(el("div", { className: "empty-state", textContent:
+        tokens.length === 0 ? "No tokens yet — click “Add Token” to add one." : "No tokens match your search." }));
+      return;
+    }
+
+    const tbody = el("tbody", {}, rows.map((t) => {
+      const used = domains.filter((d) => d.tokenId === t.id);
+      return el("tr", {}, [
+        el("td", {}, el("span", { className: "chip", textContent: t.alias })),
+        el("td", { className: "mono", textContent: t.masked }),
+        el("td", {}, [
+          `${used.length} domain${used.length === 1 ? "" : "s"}`,
+          used.length ? el("div", { className: "subtext", textContent: used.map((d) => d.name).join(", ") }) : null,
+        ]),
+        rowMenu([
+          ["Edit", () => tokenModal(t)],
+          ["Delete", () => confirmModal("Delete Token", `Delete token “${t.alias}”? This can't be undone.`, "Delete", async () => {
+            await api(`/api/tokens/${t.id}`, { method: "DELETE" });
+            tokens = tokens.filter((x) => x.id !== t.id);
+            renderAll();
+          }), true],
+        ]),
+      ]);
+    }));
+
+    wrap.replaceChildren(el("table", {}, [
+      el("thead", {}, el("tr", {}, ["Alias", "Token", "Used by", ""].map((h) => el("th", { textContent: h })))),
+      tbody,
+    ]));
+  }
+
+  // --- Dashboard + log ----------------------------------------------------
+
+  function renderDashboard() {
+    const records = status.records || [];
+    const errors = records.filter((r) => r.status === "error").length;
+
+    $("statIp").textContent = status.publicIp || "unknown";
+    $("statDomains").textContent = String(domains.length);
+
+    if (status.isRunning) {
+      $("statHealth").textContent = "Updating…";
+    } else if (!status.lastRun || records.length === 0) {
+      $("statHealth").textContent = "—";
+    } else {
+      $("statHealth").textContent = errors ? `${errors} error${errors === 1 ? "" : "s"}` : "All good";
+    }
+    $("statHealth").style.color = errors ? "var(--bad)" : "";
+    $("statHealthLabel").textContent = status.lastRun ? `Last run ${fmtRelative(status.lastRun)}` : "Not run yet";
+    $("statNext").textContent = fmtRelative(status.nextRun);
+    $("statNext").title = fmtTime(status.nextRun);
+    $("statLast").textContent = "Next run";
+
+    const wrap = $("recordsWrap");
+    if (records.length === 0) {
+      wrap.replaceChildren(el("div", { className: "empty-state", textContent:
+        domains.length === 0 ? "Add a domain to get started." : "No run yet." }));
+      return;
+    }
+    wrap.replaceChildren(el("table", {}, [
+      el("thead", {}, el("tr", {}, ["Domain", "Result", "Detail"].map((h) => el("th", { textContent: h })))),
+      el("tbody", {}, records.map((r) => el("tr", {}, [
+        el("td", {}, el("span", { className: "chip", textContent: r.domain })),
+        el("td", {}, el("span", { className: "status" }, [
+          el("span", { className: `dot ${r.status === "error" ? "bad" : "ok"}` }), r.status,
+        ])),
+        el("td", { textContent: r.message || "" }),
+      ]))),
+    ]));
+  }
+
+  function renderLog() {
+    const box = $("logBox");
+    const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 4;
+    box.textContent = (status.logs || [])
+      .map((l) => `[${fmtTime(l.ts)}] ${l.level.toUpperCase().padEnd(5)} ${l.message}`)
+      .join("\n") || "—";
+    if (atBottom) box.scrollTop = box.scrollHeight;
+  }
+
+  function renderAll() {
+    renderDashboard();
+    renderDomains();
+    renderTokens();
+    renderLog();
   }
 
   async function loadConfig() {
     const data = await api("/api/config");
     tokens = data.tokens || [];
-    renderTokens();
-    domainList.replaceChildren();
-    for (const d of data.domains || []) addDomainRow(d);
-    if (domainList.children.length === 0) addDomainRow();
-    $("proxied").checked = Boolean(data.proxied);
-  }
-
-  // --- Status -------------------------------------------------------------
-
-  function renderRecords(records) {
-    const table = $("recordsTable");
-    const tbody = table.querySelector("tbody");
-    tbody.replaceChildren();
-    if (!records || records.length === 0) {
-      table.style.display = "none";
-      return;
-    }
-    table.style.display = "";
-    for (const r of records) {
-      const pillClass = r.status === "error" ? "bad" : r.status === "up to date" ? "neutral" : "ok";
-      tbody.append(el("tr", {}, [
-        el("td", { textContent: r.domain }),
-        el("td", {}, el("span", { className: `pill ${pillClass}`, textContent: r.status })),
-        el("td", { textContent: r.message || "" }),
-      ]));
-    }
+    domains = data.domains || [];
+    renderAll();
   }
 
   async function refreshStatus() {
-    const data = await api("/api/status");
-    $("publicIp").textContent = data.publicIp || "unknown";
-    $("lastRun").textContent = fmtTime(data.lastRun);
-    $("nextRun").textContent = fmtTime(data.nextRun);
-
-    const pill = $("statePill");
-    if (data.isRunning) {
-      pill.textContent = "updating…";
-      pill.className = "pill busy";
-    } else if (!data.lastRun) {
-      pill.textContent = "not configured";
-      pill.className = "pill neutral";
-    } else if (data.records && data.records.some((r) => r.status === "error")) {
-      pill.textContent = "error";
-      pill.className = "pill bad";
-    } else {
-      pill.textContent = "running";
-      pill.className = "pill ok";
-    }
-
-    renderRecords(data.records);
-
-    const logBox = $("logBox");
-    logBox.textContent = (data.logs || [])
-      .map((l) => `[${l.ts}] ${l.level.toUpperCase()} ${l.message}`)
-      .join("\n") || "—";
-    logBox.scrollTop = logBox.scrollHeight;
+    status = await api("/api/status");
+    renderDashboard();
+    // Don't rebuild the tables under an open row menu.
+    if (!document.querySelector(".menu")) renderDomains();
+    renderLog();
   }
 
-  // --- Actions ------------------------------------------------------------
+  // --- Wiring -------------------------------------------------------------
 
-  $("addDomainBtn").addEventListener("click", () => {
-    addDomainRow().querySelector("input").focus();
-  });
+  $("domainSearch").addEventListener("input", renderDomains);
+  $("tokenSearch").addEventListener("input", renderTokens);
+  $("addDomainBtn").addEventListener("click", () => domainModal(null));
+  $("addTokenBtn").addEventListener("click", () => tokenModal(null));
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    showError(errorBox, "");
-    saveBtn.disabled = true;
-    saveBtn.textContent = "Saving…";
-    try {
-      const domains = [...domainList.children]
-        .map((row) => ({
-          name: row.querySelector(".domain-name").value.trim(),
-          tokenId: row.querySelector("select").dataset.tokenId || null,
-        }))
-        .filter((d) => d.name);
-      await api("/api/config", {
-        method: "POST",
-        body: JSON.stringify({ domains, proxied: $("proxied").checked }),
-      });
-      await loadConfig();
-      await refreshStatus();
-    } catch (err) {
-      showError(errorBox, err.message || String(err));
-    } finally {
-      saveBtn.disabled = false;
-      saveBtn.textContent = "Save";
-    }
-  });
-
-  updateNowBtn.addEventListener("click", async () => {
-    updateNowBtn.disabled = true;
-    updateNowBtn.textContent = "Updating…";
+  $("updateNowBtn").addEventListener("click", async () => {
+    const btn = $("updateNowBtn");
+    btn.disabled = true;
+    btn.textContent = "Updating…";
     try {
       await api("/api/update", { method: "POST" });
       await refreshStatus();
     } finally {
-      updateNowBtn.disabled = false;
-      updateNowBtn.textContent = "Update now";
+      btn.disabled = false;
+      btn.textContent = "Update now";
     }
   });
 
-  loadConfig();
-  refreshStatus();
-  setInterval(refreshStatus, 10_000);
+  $("logoutBtn").addEventListener("click", async () => {
+    await fetch("/api/logout", { method: "POST" }).catch(() => {});
+    location.replace("/login");
+  });
+
+  showTab();
+  api("/api/me").then(({ username }) => {
+    $("userName").textContent = username;
+    $("avatar").textContent = username.slice(0, 1) || "?";
+  }).catch(() => {});
+  loadConfig().then(refreshStatus).catch(() => {});
+  setInterval(() => refreshStatus().catch(() => {}), 10_000);
 </script>
 </body>
 </html>
