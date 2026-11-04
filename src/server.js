@@ -12,6 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 8080;
 const AUTH_USER = process.env.AUTH_USER || "";
 const AUTH_PASSWORD = process.env.AUTH_PASSWORD || "";
+const API_KEY = process.env.API_KEY || "";
 
 if (!AUTH_USER || !AUTH_PASSWORD) {
   console.error(
@@ -140,8 +141,18 @@ app.post("/api/logout", (req, res) => {
   res.json({ ok: true });
 });
 
+// Scripts can skip the login page by sending `Authorization: Bearer <API_KEY>`.
+// Only enabled when API_KEY is set.
+function hasValidApiKey(req) {
+  if (!API_KEY) return false;
+  const header = req.headers.authorization || "";
+  const match = /^Bearer\s+(.+)$/i.exec(header);
+  return Boolean(match) && timingSafeEqualStr(match[1].trim(), API_KEY);
+}
+
 app.use((req, res, next) => {
   if (sessionFrom(req)) return next();
+  if (req.path.startsWith("/api/") && hasValidApiKey(req)) return next();
   if (req.path.startsWith("/api/")) {
     return res.status(401).json({ error: "not logged in" });
   }
@@ -305,6 +316,80 @@ app.post("/api/config", async (req, res) => {
 
   const state = await updater.runOnce();
   res.json({ ok: true, records: state.records });
+});
+
+function tokenByAlias(alias) {
+  const lower = alias.toLowerCase();
+  return config.get().tokens.find((t) => t.alias.toLowerCase() === lower) || null;
+}
+
+function describeDomain(domain, records) {
+  const token = config.tokenById(domain.tokenId);
+  return {
+    name: domain.name,
+    tokenId: domain.tokenId,
+    tokenAlias: token ? token.alias : null,
+    proxied: domain.proxied,
+    record: records.find((r) => r.domain === domain.name) || null,
+  };
+}
+
+app.get("/api/domains", (req, res) => {
+  const { records } = updater.getState();
+  res.json({ domains: config.get().domains.map((d) => describeDomain(d, records)) });
+});
+
+// Add a single domain. The token can be picked by `tokenAlias` (or `tokenId`)
+// of an already saved token, or a new one can be saved on the fly by sending
+// `token` together with a `tokenAlias` that isn't taken yet.
+app.post("/api/domains", async (req, res) => {
+  const body = req.body || {};
+
+  const name = typeof body.name === "string" ? body.name.trim().toLowerCase() : "";
+  if (!name) return res.status(400).json({ error: "name is required" });
+  if (!HOSTNAME_RE.test(name)) return res.status(400).json({ error: `invalid domain: ${name}` });
+  if (config.get().domains.some((d) => d.name === name)) {
+    return res.status(409).json({ error: `domain "${name}" already exists` });
+  }
+
+  let tokenId;
+  let newToken = null;
+  if (typeof body.token === "string" && body.token.trim()) {
+    const { alias, error: aliasError } = parseAlias(body.tokenAlias);
+    if (aliasError) return res.status(400).json({ error: aliasError });
+    if (aliasTaken(alias)) {
+      return res.status(400).json({ error: `a token named "${alias}" already exists` });
+    }
+    const { token, error: tokenError } = await parseToken(body.token);
+    if (tokenError) return res.status(400).json({ error: tokenError });
+    newToken = { id: config.newTokenId(), alias, token };
+    tokenId = newToken.id;
+  } else if (typeof body.tokenAlias === "string" && body.tokenAlias.trim()) {
+    const existing = tokenByAlias(body.tokenAlias.trim());
+    if (!existing) {
+      return res.status(400).json({ error: `no token named "${body.tokenAlias.trim()}"` });
+    }
+    tokenId = existing.id;
+  } else if (typeof body.tokenId === "string" && config.tokenById(body.tokenId)) {
+    tokenId = body.tokenId;
+  } else {
+    return res.status(400).json({ error: "tokenAlias (or tokenId, or token + tokenAlias) is required" });
+  }
+
+  // Proxied unless explicitly turned off.
+  const domain = { name, tokenId, proxied: body.proxied !== false };
+  await config.save((cur) => ({
+    tokens: newToken ? [...cur.tokens, newToken] : cur.tokens,
+    domains: cur.domains.some((d) => d.name === name) ? cur.domains : [...cur.domains, domain],
+  }));
+  if (newToken) log.info(`token "${newToken.alias}" added`);
+  log.info(`domain "${name}" added (${domain.proxied ? "proxied" : "DNS only"})`);
+
+  const state = await updater.runOnce();
+  res.status(201).json({
+    domain: describeDomain(domain, state.records),
+    ...(newToken && { token: maskToken(newToken) }),
+  });
 });
 
 app.post("/api/update", async (req, res) => {

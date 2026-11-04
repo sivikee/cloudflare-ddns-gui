@@ -105,9 +105,39 @@ Environment variables (set in `.env`, read by `docker-compose.yml`):
 | `AUTH_USER`                | yes      | —       | GUI login username                    |
 | `AUTH_PASSWORD`            | yes      | —       | GUI login password                    |
 | `UPDATE_INTERVAL_MINUTES`  | no       | `5`     | How often to reconcile DNS records    |
+| `API_KEY`                  | no       | —       | Bearer key for the HTTP API (see below) |
 
 Everything else (tokens, domains, per-domain proxied) is set through the GUI and stored in
 `data/config.json`. A config from an older single-token version is migrated
 automatically on startup: the old token becomes one named `default` and every
 existing domain is assigned to it. A global proxied setting from an older
 version is copied onto each domain.
+
+## HTTP API
+
+Besides the GUI, domains can be managed over HTTP. Set `API_KEY` in `.env` and
+send it as a bearer token (a logged-in GUI session works too):
+
+```sh
+# List all domains, with their token alias, proxied flag and last update result
+curl -H "Authorization: Bearer $API_KEY" http://<your-server>:8080/api/domains
+
+# Add a domain using an already saved token, picked by its alias
+curl -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
+  -d '{"name":"home.example.org","tokenAlias":"personal"}' \
+  http://<your-server>:8080/api/domains
+
+# Add a domain together with a new token, saved under a new alias
+curl -X POST -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
+  -d '{"name":"vpn.example.com","tokenAlias":"work","token":"<cloudflare-api-token>","proxied":false}' \
+  http://<your-server>:8080/api/domains
+```
+
+`POST /api/domains` takes `name` (required), `tokenAlias` (or `tokenId`) and
+optionally `token` to save a new token under that alias, plus `proxied`
+(defaults to `true`). New tokens are verified with Cloudflare first. The domain
+is updated right away and the response (`201`) includes the result; adding a
+domain that already exists returns `409`.
+
+Saved tokens can also be added on their own with
+`POST /api/tokens` (`{"alias": "...", "token": "..."}`).

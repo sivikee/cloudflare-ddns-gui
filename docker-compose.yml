@@ -10,5 +10,6 @@ services:
       - AUTH_USER=${AUTH_USER}
       - AUTH_PASSWORD=${AUTH_PASSWORD}
       - UPDATE_INTERVAL_MINUTES=${UPDATE_INTERVAL_MINUTES:-5}
+      - API_KEY=${API_KEY:-}
     volumes:
       - ./data:/data
